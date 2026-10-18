@@ -1,14 +1,13 @@
-const dotenv = require("dotenv");
+const dotenv = require('dotenv');
 dotenv.config();
 
-if(!process.env.MONGO_URI || !process.env.PORT || !process.env.JWT_SECRET) {
-    throw new Error("One or more required environment variables are not defined");
+if (!process.env.MONGO_URI || !process.env.JWT_SECRET) {
+  throw new Error('MONGO_URI and JWT_SECRET are required');
 }
 
-const config = {
-    MONGO_URI: process.env.MONGO_URI,
-    PORT: process.env.PORT,
-    JWT_SECRET: process.env.JWT_SECRET
+module.exports = {
+  MONGO_URI: process.env.MONGO_URI,
+  PORT: process.env.PORT || 5000,
+  JWT_SECRET: process.env.JWT_SECRET,
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d'
 };
-
-module.exports = config

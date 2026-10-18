@@ -1,88 +1,155 @@
-const User = require("../models/userModel");
-const bcrypt = require("bcryptjs");
-const config = require("../config/config");
-const jwt = require("jsonwebtoken");
+const User = require('../../shared/models/User');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { z } = require('zod');
+const config = require('../config/config');
 
-// Register a new user
-const registerUser = async (req, res) => {
-    const { name, email, password, role} = req.body;
+const registerSchema = z.object({
+  name: z.string().trim().min(1, 'name is required'),
+  email: z.string().trim().email('valid email is required'),
+  password: z.string().min(6, 'password must be at least 6 characters')
+});
 
-    try {
-        // Check if user already exists
-        const existingUser = await User.findOne({ email: email.toLowerCase() });
-        if (existingUser) {
-            return res.status(400).json({ message: "User already exists" });
-        }
+const officerSchema = z.object({
+  name: z.string().trim().min(1, 'name is required'),
+  email: z.string().trim().email('valid email is required'),
+  password: z.string().min(6, 'password must be at least 6 characters'),
+  phone: z.string().optional(),
+  address: z.string().optional()
+});
 
-        // Hash the password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Create a new user
-        const newUser = await User.create({
-            name,
-            email,
-            role,
-            password: hashedPassword
-        });
-
-        res.status(201).json({ 
-            message: "User registered successfully",
-            user: {
-                id: newUser._id,
-                name: newUser.name,
-                email: newUser.email,
-                role: newUser.role
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ message: "Registartion failed!", error: error.message });
+const registerUser = async (req, res, next) => {
+  try {
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: parsed.error.issues[0]?.message || 'Invalid input data'
+      });
     }
+
+    const { name, email, password } = parsed.data;
+
+    const existing = await User.findOne({ email: email.toLowerCase() });
+    if (existing) {
+      return res.status(409).json({ message: 'Email already registered' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      role: 'citizen',
+      password: hashedPassword
+    });
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
-// Login a user
-const loginUser = async (req, res) => {
+const loginUser = async (req, res, next) => {
+  try {
     const { email, password } = req.body;
-
-    try {
-        // Check required fields
-        if (!email || !password) {
-            return res.status(400).json({
-                message: "Email and password are required"
-            });
-        }
-
-        // Check if user exists
-        const user = await User.findOne({ email: email.toLowerCase() });
-        if (!user) {
-            return res.status(400).json({ message: "Invalid credentials" });
-        }
-
-        // Check if password is correct
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: "Invalid credentials" });
-        }
-
-        // Generate JWT token
-        const token = jwt.sign(
-            { id: user._id, email: user.email, role: user.role },
-            config.JWT_SECRET,
-            { expiresIn: "1h" }
-        );
-
-        res.status(200).json({
-            message: "User logged in successfully",
-            token: token,
-            user: {
-                id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ message: "Login failed!", error: error.message });
+    if (!email || !password) {
+      return res.status(400).json({ message: 'email and password are required' });
     }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      config.JWT_SECRET,
+      { expiresIn: config.JWT_EXPIRES_IN }
+    );
+
+    res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
-module.exports = {registerUser, loginUser};
+const createOfficer = async (req, res, next) => {
+  try {
+    const parsed = officerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: parsed.error.issues[0]?.message || 'Invalid officer data'
+      });
+    }
+
+    const { name, email, password, phone, address } = parsed.data;
+
+    const existing = await User.findOne({ email: email.toLowerCase() });
+    if (existing) {
+      return res.status(409).json({ message: 'Email already registered' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const officer = await User.create({
+      name,
+      email: email.toLowerCase(),
+      role: 'officer',
+      password: hashedPassword,
+      phone,
+      address
+    });
+
+    res.status(201).json({
+      message: 'Officer created successfully',
+      user: {
+        id: officer._id,
+        name: officer.name,
+        email: officer.email,
+        role: officer.role
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getOfficers = async (req, res, next) => {
+  try {
+    const officers = await User.find({ role: 'officer' }).select('-password');
+    res.status(200).json({
+      message: 'Officers retrieved',
+      count: officers.length,
+      officers
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  registerUser,
+  loginUser,
+  createOfficer,
+  getOfficers
+};

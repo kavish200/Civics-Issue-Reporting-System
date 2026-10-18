@@ -1,6 +1,6 @@
-const authorizeRoles = (roles) => {
+const authorizeRoles = (...roles) => {
     return (req, res, next) => {
-        if (req.user.role !== roles) {
+        if (!roles.includes(req.user.role)) {
             return res.status(403).json({
                 message: "Access denied. You do not have permission to perform this action."
             });
@@ -9,4 +9,4 @@ const authorizeRoles = (roles) => {
     };
 };
 
-module.exports = authorizeRoles;    
+module.exports = authorizeRoles;
