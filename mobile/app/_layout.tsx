@@ -97,7 +97,7 @@ function RootNavigation() {
     const isEntryRoute = segments.length === 0 || segments[0] === 'index' || !segments[0];
 
     if (!token || !user) {
-      if (!inAuthGroup) {
+      if (!inAuthGroup && !inAdminNotice) {
         router.replace('/(auth)/login');
       }
       return;

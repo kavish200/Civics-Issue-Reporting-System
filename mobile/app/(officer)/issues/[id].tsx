@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   TouchableOpacity,
   TextInput,
   Alert,
   Linking,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,10 +17,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../src/theme';
 import { useIssueDetail } from '../../../src/features/complaints/hooks';
 import { useUpdateProgress } from '../../../src/features/officer/hooks';
-import { StatusBadge, PriorityBadge, ScreenContainer, Button } from '../../../src/components';
+import { StatusBadge, PriorityBadge, ScreenContainer, Card, Button } from '../../../src/components';
+import { API_URL } from '../../../src/api/client';
+
+function getImageUrl(imagePath?: string): string | null {
+  if (!imagePath) return null;
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    return imagePath;
+  }
+  const base = API_URL.replace(/\/api\/?$/, '');
+  return `${base}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+}
 
 export default function OfficerComplaintDetailScreen() {
-  const { colors, spacing, typography } = useTheme();
+  const { colors, spacing, typography, radii, isDark } = useTheme();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [remark, setRemark] = useState('');
@@ -92,7 +102,7 @@ export default function OfficerComplaintDetailScreen() {
 
   const handleSubmitProgress = async () => {
     if (!nextStatus || !remark.trim()) {
-      Alert.alert('Error', 'Please enter a remark before updating');
+      Alert.alert('Remark Required', 'Please enter a brief remark before updating status.');
       return;
     }
 
@@ -106,14 +116,14 @@ export default function OfficerComplaintDetailScreen() {
         image: selectedImage || undefined,
       });
 
-      Alert.alert('Success', `Status updated to ${nextStatus}`);
+      Alert.alert('Status Updated', `Task status has been updated to "${nextStatus}".`);
       setRemark('');
       setSelectedImage(null);
     } catch (err: any) {
       const errorMsg =
         err.response?.data?.message ||
         err.message ||
-        'Failed to update progress. Please try again.';
+        'Failed to update progress. Please verify network connection and try again.';
       setServerError(errorMsg);
     }
   };
@@ -124,13 +134,13 @@ export default function OfficerComplaintDetailScreen() {
     const [longitude, latitude] = issue.location.coordinates;
     const url = `http://maps.google.com/?q=${latitude},${longitude}`;
     Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open maps');
+      Alert.alert('Error', 'Could not open external maps application.');
     });
   };
 
   if (isLoading) {
     return (
-      <ScreenContainer>
+      <ScreenContainer showBack onBackPress={() => router.back()}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -140,19 +150,27 @@ export default function OfficerComplaintDetailScreen() {
 
   if (error || !issue) {
     return (
-      <ScreenContainer>
+      <ScreenContainer showBack onBackPress={() => router.back()}>
         <View style={styles.centerContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
-          <Text style={[styles.errorText, typography.bodyMedium, { color: colors.danger }]}>
-            Failed to load complaint
+          <Text style={[styles.errorText, typography.bodyMedium, { color: colors.danger, marginTop: 12 }]}>
+            Failed to load complaint details.
           </Text>
         </View>
       </ScreenContainer>
     );
   }
 
+  const citizenImgUrl = getImageUrl(issue.image);
+
   return (
-    <ScreenContainer scrollable showBack onBackPress={() => router.back()}>
+    <ScreenContainer
+      scrollable
+      showBack
+      onBackPress={() => router.back()}
+      headerTitle="Task Details"
+      headerSubtitle={issue.trackingId || 'Complaint Dispatch'}
+    >
       {serverError && (
         <View
           style={[
@@ -160,7 +178,7 @@ export default function OfficerComplaintDetailScreen() {
             {
               backgroundColor: colors.dangerLight,
               borderColor: colors.danger,
-              marginBottom: spacing.lg,
+              marginBottom: spacing.md,
             },
           ]}
         >
@@ -171,88 +189,168 @@ export default function OfficerComplaintDetailScreen() {
         </View>
       )}
 
-      <View style={[styles.headerSection, { backgroundColor: colors.surface, marginBottom: spacing.lg }]}>
+      {/* Main Task Overview Card */}
+      <Card style={{ marginBottom: spacing.md, padding: spacing.md }}>
         <View style={styles.titleRow}>
-          <Text style={[styles.trackingId, typography.labelSmall, { color: colors.textSecondary }]}>
-            {issue.trackingId}
-          </Text>
+          <View
+            style={[
+              styles.trackingPill,
+              {
+                backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : colors.primaryLight,
+                borderRadius: radii.sm,
+              },
+            ]}
+          >
+            <Text style={[typography.labelSmall, { color: colors.primary, fontWeight: '700' }]}>
+              {issue.trackingId}
+            </Text>
+          </View>
           <StatusBadge status={issue.status} />
         </View>
-        <Text style={[styles.description, typography.bodyMedium, { color: colors.text, marginTop: spacing.sm }]}>
-          {issue.description}
-        </Text>
-        <View style={[styles.badgesRow, { marginTop: spacing.sm }]}>
-          <PriorityBadge priority={issue.priority} priorityScore={issue.priorityScore} />
-        </View>
-      </View>
 
-      <View style={[styles.infoSection, { backgroundColor: colors.surface, marginBottom: spacing.lg }]}>
-        <InfoRow
-          label="Address"
-          value={issue.location?.address || 'Not provided'}
-          colors={colors}
-          typography={typography}
-        />
-        <TouchableOpacity
-          style={[styles.mapsButton, { borderColor: colors.primary }]}
-          onPress={handleOpenMaps}
-        >
-          <Ionicons name="navigate-outline" size={16} color={colors.primary} />
-          <Text style={[styles.mapsButtonText, typography.labelSmall, { color: colors.primary }]}>
-            Open in Maps
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {issue.statusHistory && issue.statusHistory.length > 0 && (
-        <View style={[styles.timelineSection, { marginBottom: spacing.lg }]}>
-          <Text style={[styles.sectionTitle, typography.labelMedium, { color: colors.text }]}>
-            Status History
-          </Text>
-          {issue.statusHistory.map((entry: any, index: number) => (
-            <View key={index} style={styles.timelineItem}>
-              <View
-                style={[
-                  styles.timelineDot,
-                  { backgroundColor: colors.primary, borderColor: colors.surface },
-                ]}
-              />
-              {index < issue.statusHistory.length - 1 && (
-                <View
-                  style={[styles.timelineLine, { backgroundColor: colors.border }]}
-                />
-              )}
-              <View style={[styles.timelineContent, { marginLeft: spacing.md }]}>
-                <Text style={[typography.labelSmall, { color: colors.text }]}>
-                  {entry.status}
-                </Text>
-                {entry.remark && (
-                  <Text style={[styles.remark, typography.bodySmall, { color: colors.textSecondary }]}>
-                    {entry.remark}
-                  </Text>
-                )}
-                <Text style={[styles.timestamp, typography.labelSmall, { color: colors.textSecondary }]}>
-                  {formatDate(entry.createdAt)}
-                </Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {canUpdate && (
-        <View
+        <Text
           style={[
-            styles.progressSection,
-            { backgroundColor: colors.surface, marginBottom: spacing.lg },
+            typography.titleMedium,
+            { color: colors.text, marginTop: spacing.sm, fontWeight: '700' },
           ]}
         >
-          <Text style={[styles.sectionTitle, typography.labelMedium, { color: colors.text }]}>
-            Update to {nextStatus}
+          {issue.category?.replace('_', ' ').toUpperCase()}
+        </Text>
+
+        <Text
+          style={[
+            typography.bodyMedium,
+            { color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 21 },
+          ]}
+        >
+          {issue.description}
+        </Text>
+
+        <View style={[styles.badgesRow, { marginTop: spacing.md }]}>
+          <PriorityBadge priority={issue.priority} priorityScore={issue.priorityScore} />
+        </View>
+      </Card>
+
+      {/* Citizen's Uploaded Issue Photo */}
+      {citizenImgUrl && (
+        <Card style={{ marginBottom: spacing.md, padding: spacing.md }}>
+          <Text style={[typography.labelMedium, { color: colors.text, marginBottom: spacing.sm, fontWeight: '700' }]}>
+            Citizen Attached Photo
           </Text>
+          <Image
+            source={{ uri: citizenImgUrl }}
+            style={[
+              styles.citizenPhoto,
+              {
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+                borderRadius: radii.md,
+              },
+            ]}
+            resizeMode="cover"
+          />
+        </Card>
+      )}
+
+      {/* Location & Navigation Card */}
+      <Card style={{ marginBottom: spacing.md, padding: spacing.md }}>
+        <Text style={[typography.labelMedium, { color: colors.text, marginBottom: spacing.xs, fontWeight: '700' }]}>
+          Location Information
+        </Text>
+
+        <View style={styles.addressContainer}>
+          <Ionicons name="location-sharp" size={18} color={colors.primary} style={{ marginTop: 2 }} />
+          <Text
+            style={[
+              typography.bodyMedium,
+              { color: colors.text, marginLeft: 8, flex: 1, lineHeight: 20 },
+            ]}
+          >
+            {issue.location?.address || issue.address || 'Address not specified'}
+          </Text>
+        </View>
+
+        {issue.location?.coordinates && (
+          <TouchableOpacity
+            style={[
+              styles.mapsButton,
+              {
+                backgroundColor: isDark ? 'rgba(59, 130, 246, 0.12)' : colors.primaryLight,
+                borderColor: colors.primary,
+              },
+            ]}
+            onPress={handleOpenMaps}
+          >
+            <Ionicons name="navigate-outline" size={16} color={colors.primary} />
+            <Text style={[styles.mapsButtonText, typography.labelSmall, { color: colors.primary, fontWeight: '700' }]}>
+              Open in Maps Navigation
+            </Text>
+          </TouchableOpacity>
+        )}
+      </Card>
+
+      {/* Status History Timeline Card */}
+      {issue.statusHistory && issue.statusHistory.length > 0 && (
+        <Card style={{ marginBottom: spacing.md, padding: spacing.md }}>
+          <Text style={[typography.labelMedium, { color: colors.text, marginBottom: spacing.md, fontWeight: '700' }]}>
+            Status History Timeline
+          </Text>
+          {issue.statusHistory.map((entry: any, index: number) => {
+            const isLast = index === issue.statusHistory.length - 1;
+            return (
+              <View key={index} style={styles.timelineItem}>
+                <View style={styles.timelineIndicator}>
+                  <View
+                    style={[
+                      styles.timelineDot,
+                      { backgroundColor: colors.primary },
+                    ]}
+                  />
+                  {!isLast && (
+                    <View
+                      style={[styles.timelineLine, { backgroundColor: colors.border }]}
+                    />
+                  )}
+                </View>
+
+                <View style={styles.timelineContent}>
+                  <View style={styles.timelineHeader}>
+                    <Text style={[typography.labelSmall, { color: colors.text, fontWeight: '700' }]}>
+                      {entry.status}
+                    </Text>
+                    <Text style={[typography.caption, { color: colors.textMuted }]}>
+                      {formatDate(entry.createdAt)}
+                    </Text>
+                  </View>
+                  {entry.remark ? (
+                    <Text style={[styles.remark, typography.bodySmall, { color: colors.textSecondary }]}>
+                      "{entry.remark}"
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            );
+          })}
+        </Card>
+      )}
+
+      {/* Progress Update Form Card */}
+      {canUpdate && (
+        <Card style={{ marginBottom: spacing.xl, padding: spacing.md }}>
+          <View style={styles.nextStatusHeader}>
+            <Text style={[typography.titleSmall, { color: colors.text, fontWeight: '700' }]}>
+              Update Progress
+            </Text>
+            <View style={[styles.targetBadge, { backgroundColor: colors.primaryLight }]}>
+              <Text style={[typography.labelSmall, { color: colors.primary, fontWeight: '700' }]}>
+                Next: {nextStatus}
+              </Text>
+            </View>
+          </View>
 
           <View style={{ marginTop: spacing.md }}>
-            <Text style={[typography.labelSmall, { color: colors.text }]}>Remark</Text>
+            <Text style={[typography.labelSmall, { color: colors.text, fontWeight: '600' }]}>
+              Progress Remark
+            </Text>
             <TextInput
               style={[
                 styles.remarkInput,
@@ -262,42 +360,54 @@ export default function OfficerComplaintDetailScreen() {
                   color: colors.text,
                 },
               ]}
-              placeholder="Describe the progress or resolution..."
+              placeholder={`Describe action taken to move to "${nextStatus}"...`}
               placeholderTextColor={colors.textSecondary}
               value={remark}
               onChangeText={setRemark}
               multiline
-              numberOfLines={4}
+              numberOfLines={3}
             />
           </View>
 
           <View style={[styles.imageSection, { marginTop: spacing.md }]}>
-            <Text style={[typography.labelSmall, { color: colors.text, marginBottom: spacing.sm }]}>
-              Progress Photo (Optional)
+            <Text style={[typography.labelSmall, { color: colors.text, marginBottom: spacing.xs, fontWeight: '600' }]}>
+              On-Site Photo Evidence (Optional)
             </Text>
+
             {selectedImage && (
               <View
                 style={[
-                  styles.imagePreview,
+                  styles.imagePreviewContainer,
                   { backgroundColor: colors.background, borderColor: colors.border },
                 ]}
               >
-                <View
-                  style={[
-                    styles.imagePlaceholder,
-                    { backgroundColor: colors.border },
-                  ]}
+                <Image
+                  source={{ uri: selectedImage.uri }}
+                  style={styles.imagePreviewThumb}
+                  resizeMode="cover"
                 />
-                <TouchableOpacity onPress={() => setSelectedImage(null)}>
-                  <Ionicons name="close-circle" size={20} color={colors.danger} />
+                <View style={styles.imagePreviewMeta}>
+                  <Text style={[typography.labelSmall, { color: colors.text }]} numberOfLines={1}>
+                    Photo attached
+                  </Text>
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                    Ready for submission
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setSelectedImage(null)}
+                  style={[styles.removeImageBtn, { backgroundColor: colors.dangerLight }]}
+                >
+                  <Ionicons name="trash-outline" size={16} color={colors.danger} />
                 </TouchableOpacity>
               </View>
             )}
+
             <View style={styles.imageButtonsRow}>
               <Button
                 title="Camera"
                 onPress={handleCameraImage}
-                variant="outlined"
+                variant="outline"
                 size="sm"
                 icon="camera"
                 style={{ flex: 1, marginRight: spacing.sm }}
@@ -305,7 +415,7 @@ export default function OfficerComplaintDetailScreen() {
               <Button
                 title="Gallery"
                 onPress={handlePickImage}
-                variant="outlined"
+                variant="outline"
                 size="sm"
                 icon="image"
                 style={{ flex: 1 }}
@@ -313,47 +423,26 @@ export default function OfficerComplaintDetailScreen() {
             </View>
           </View>
 
-          <View style={[styles.actionButtons, { marginTop: spacing.lg }]}>
-            <Button
-              title={`Update to ${nextStatus}`}
-              onPress={handleSubmitProgress}
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={updateMutation.isPending}
-            />
-          </View>
-        </View>
+          <Button
+            title={`Submit & Mark as "${nextStatus}"`}
+            onPress={handleSubmitProgress}
+            variant="primary"
+            size="lg"
+            fullWidth
+            loading={updateMutation.isPending}
+            style={{ marginTop: spacing.lg }}
+          />
+        </Card>
       )}
     </ScreenContainer>
   );
 }
 
-interface InfoRowProps {
-  label: string;
-  value: string;
-  colors: any;
-  typography: any;
-}
-
-function InfoRow({ label, value, colors, typography }: InfoRowProps) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={[typography.labelSmall, { color: colors.textSecondary }]}>
-        {label}
-      </Text>
-      <Text style={[typography.bodyMedium, { color: colors.text, marginTop: 4 }]}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 function formatDate(date: string): string {
+  if (!date) return '';
   return new Date(date).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
-    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -364,9 +453,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 60,
   },
   errorText: {
-    marginTop: 12,
+    textAlign: 'center',
   },
   serverErrorBanner: {
     borderRadius: 8,
@@ -379,111 +469,118 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  headerSection: {
-    borderRadius: 12,
-    padding: 16,
-  },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  trackingId: {
-    flex: 1,
-  },
-  description: {
-    lineHeight: 20,
+  trackingPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   badgesRow: {
     flexDirection: 'row',
     gap: 8,
   },
-  infoSection: {
-    borderRadius: 12,
-    padding: 16,
+  citizenPhoto: {
+    width: '100%',
+    height: 200,
+    borderWidth: 1,
   },
-  infoRow: {
-    marginBottom: 12,
+  addressContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 6,
   },
   mapsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 8,
+    justifyContent: 'center',
+    borderRadius: 10,
     borderWidth: 1,
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     marginTop: 12,
   },
   mapsButtonText: {
     marginLeft: 8,
   },
-  timelineSection: {
-    marginHorizontal: 0,
-  },
-  sectionTitle: {
-    marginBottom: 16,
-  },
   timelineItem: {
     flexDirection: 'row',
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  timelineIndicator: {
+    alignItems: 'center',
+    width: 20,
+    marginRight: 12,
   },
   timelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    marginTop: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 4,
   },
   timelineLine: {
-    position: 'absolute',
-    left: 5,
-    top: 12,
     width: 2,
-    height: 30,
+    flex: 1,
+    marginTop: 4,
   },
   timelineContent: {
     flex: 1,
+  },
+  timelineHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   remark: {
     marginTop: 4,
     fontStyle: 'italic',
   },
-  timestamp: {
-    marginTop: 4,
+  nextStatusHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  progressSection: {
+  targetBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
-    padding: 16,
   },
   remarkInput: {
     borderRadius: 8,
     borderWidth: 1,
     padding: 12,
-    marginTop: 8,
+    marginTop: 6,
     textAlignVertical: 'top',
+    fontSize: 14,
   },
   imageSection: {
     marginTop: 16,
   },
-  imagePreview: {
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 12,
+  imagePreviewContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    padding: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginVertical: 10,
   },
-  imagePlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 4,
+  imagePreviewThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 6,
+  },
+  imagePreviewMeta: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  removeImageBtn: {
+    padding: 8,
+    borderRadius: 8,
   },
   imageButtonsRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  actionButtons: {
-    marginBottom: 20,
   },
 });
+

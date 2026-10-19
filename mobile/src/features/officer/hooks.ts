@@ -1,10 +1,10 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 
 export function useAssignedIssues(status?: string) {
   return useQuery({
-    queryKey: queryKeys.issues.assigned(),
+    queryKey: queryKeys.issues.assignedFiltered(status),
     queryFn: async () => {
       const params = status ? { status } : {};
       const { data } = await apiClient.get('/issues/assigned', { params });
@@ -14,6 +14,8 @@ export function useAssignedIssues(status?: string) {
 }
 
 export function useUpdateProgress() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       id,
@@ -48,5 +50,9 @@ export function useUpdateProgress() {
       );
       return data;
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.all });
+    },
   });
 }
+

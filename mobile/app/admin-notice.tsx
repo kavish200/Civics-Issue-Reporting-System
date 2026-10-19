@@ -4,27 +4,32 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ScreenContainer } from '../src/components/ScreenContainer';
 import { Button } from '../src/components/Button';
+import { Card } from '../src/components/Card';
 import { useAuthStore } from '../src/features/auth/store';
 import { useTheme } from '../src/theme';
 
 export default function AdminNoticeScreen() {
-  const { colors, spacing, typography } = useTheme();
+  const { colors, spacing, typography, radii, isDark } = useTheme();
   const logout = useAuthStore((state) => state.logout);
   const router = useRouter();
 
-  const handleLogout = async () => {
-    await logout();
+  const handleReturn = async () => {
+    try {
+      await logout();
+    } catch {
+      // Ignore if not logged in
+    }
     router.replace('/(auth)/login');
   };
 
   return (
-    <ScreenContainer>
+    <ScreenContainer scrollable>
       <View style={[styles.container, { padding: spacing.xl }]}>
         <View
           style={[
             styles.iconCircle,
             {
-              backgroundColor: colors.primaryLight,
+              backgroundColor: isDark ? 'rgba(59, 130, 246, 0.18)' : colors.primaryLight,
               marginBottom: spacing.lg,
             },
           ]}
@@ -34,8 +39,8 @@ export default function AdminNoticeScreen() {
 
         <Text
           style={[
-            typography.titleMedium,
-            { color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+            typography.titleLarge,
+            { color: colors.text, textAlign: 'center', marginBottom: spacing.sm, fontWeight: '700' },
           ]}
         >
           Web Admin Portal Required
@@ -43,24 +48,50 @@ export default function AdminNoticeScreen() {
 
         <Text
           style={[
-            typography.bodyLarge,
+            typography.bodyMedium,
             {
               color: colors.textSecondary,
               textAlign: 'center',
-              lineHeight: 24,
-              marginBottom: spacing.xxl,
+              lineHeight: 22,
+              marginBottom: spacing.xl,
             },
           ]}
         >
-          This mobile application is intended specifically for citizens and field officers.
-          Administrative privileges, dispatch management, and system governance must be accessed
-          through the Civics Web Administration Dashboard.
+          Administrator accounts are configured for system governance and city dispatch via the Web Administration Dashboard.
         </Text>
 
+        <Card style={[styles.infoCard, { marginBottom: spacing.xl, borderColor: colors.border }]}>
+          <View style={styles.infoRow}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} style={{ marginTop: 2 }} />
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={[typography.labelMedium, { color: colors.text, fontWeight: '600' }]}>
+                Field Officer Access
+              </Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
+                Field officers should sign in using their officer credentials (e.g. officer1@gmail.com).
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <View style={styles.infoRow}>
+            <Ionicons name="person-circle-outline" size={20} color={colors.success} style={{ marginTop: 2 }} />
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={[typography.labelMedium, { color: colors.text, fontWeight: '600' }]}>
+                Citizen Access
+              </Text>
+              <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
+                Citizens can register or sign in to report civic problems and track resolution progress.
+              </Text>
+            </View>
+          </View>
+        </Card>
+
         <Button
-          title="Sign Out to Return"
-          icon="log-out-outline"
-          onPress={handleLogout}
+          title="Return to Sign In"
+          icon="arrow-back"
+          onPress={handleReturn}
           variant="primary"
           size="lg"
           fullWidth
@@ -77,10 +108,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  infoCard: {
+    width: '100%',
+    padding: 16,
+    borderRadius: 14,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  divider: {
+    height: 1,
+    marginVertical: 12,
+  },
 });
+
