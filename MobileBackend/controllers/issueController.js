@@ -47,40 +47,74 @@ const saveUploadedFile = async (file) => {
   }
 };
 
+const { verifyLegitimacy, autoDispatchIssue } = require('../utils/autoTriage');
+
 const createIssue = async (req, res, next) => {
   try {
     const { category, description, latitude, longitude, address, clientId } = req.body;
 
-    const imageUrl = await saveUploadedFile(req.file);
+    // 1. Automated Legitimacy Check (Coordinates, Duplicate Detection, Dynamic Priority & Gemini Vision)
+    const triage = await verifyLegitimacy({
+      category,
+      description,
+      latitude,
+      longitude,
+      file: req.file
+    });
 
-    const lat = parseFloat(latitude) || 22.7196;
-    const lng = parseFloat(longitude) || 75.8577;
+    if (!triage.isLegit) {
+      return res.status(400).json({
+        message: triage.errors.join('; '),
+        errors: triage.errors,
+        aiInspection: triage.aiInspection || null
+      });
+    }
+
+    const imageUrl = await saveUploadedFile(req.file);
 
     const trackingId = `ISSUE-${Math.random().toString(36).substr(2, 5).toUpperCase()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     const issue = new Issue({
-      category: category || 'road_damage',
-      description: description || 'Civic issue reported',
+      category,
+      description: description.trim(),
       image: imageUrl,
       location: {
         type: 'Point',
-        coordinates: [lng, lat]
+        coordinates: triage.coordinates
       },
       address: address || 'Indore, Madhya Pradesh',
       reporter: req.user.id,
       status: 'Submitted',
-      priorityScore: 0.5,
-      priority: 'Medium',
+      priorityScore: triage.priorityScore,
+      priority: triage.priority,
+      duplicateCandidate: triage.duplicateCandidate,
+      duplicateOf: triage.duplicateOf || undefined,
       trackingId,
       clientId: clientId || undefined
     });
 
+    // 2. Automated Dispatch to Field Officer (Workload Balancing, Zero Manual Admin Work)
+    const dispatchResult = await autoDispatchIssue(issue, req.user.id, triage.aiInspection);
+
     await issue.save();
     await issue.populate('reporter', 'name email');
+    if (issue.assignedTo) {
+      await issue.populate('assignedTo', 'name email');
+    }
+
     res.status(201).json({
       message: 'Issue reported successfully',
       issue,
-      duplicateCandidate: false
+      duplicateCandidate: triage.duplicateCandidate,
+      autoDispatched: dispatchResult.assigned,
+      aiInspection: triage.aiInspection || null,
+      assignedOfficer: dispatchResult.officer
+        ? {
+            id: dispatchResult.officer._id,
+            name: dispatchResult.officer.name,
+            email: dispatchResult.officer.email
+          }
+        : null
     });
   } catch (err) {
     next(err);
