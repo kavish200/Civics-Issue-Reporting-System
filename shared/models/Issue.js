@@ -13,6 +13,7 @@ const issueSchema = new mongoose.Schema({
     address: { type: String }
   },
   status: { type: String, enum: statusValues, default: 'Submitted' },
+  rejectionReason: { type: String, trim: true },
   statusHistory: [{
     status: { type: String, enum: statusValues },
     remark: { type: String },
