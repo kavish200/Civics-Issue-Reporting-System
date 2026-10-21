@@ -7,6 +7,7 @@ const config = require('./config/config');
 const userRoutes = require('./routes/userRoute');
 const testRoutes = require('./routes/testRoute');
 const issueRoutes = require('./routes/issueRoute');
+const adminRoutes = require('./routes/adminRoute');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -28,6 +29,7 @@ app.use('/api/users/register', authLimiter);
 app.use('/api/users', userRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/issues', issueRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/', (req, res) => res.json({ message: 'Civics Admin API v1' }));
 
