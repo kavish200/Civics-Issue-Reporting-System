@@ -1,11 +1,12 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
+const { registerUser, loginUser, createOfficer, getOfficers } = require('../controllers/userController');
+const { verifyToken } = require('../middlewares/authMiddleware');
+const authorizeRoles = require('../middlewares/roleMiddleware');
 
-const {registerUser, loginUser} = require("../controllers/userController");
+router.post('/register', registerUser);
+router.post('/login', loginUser);
+router.post('/officers', verifyToken, authorizeRoles('admin'), createOfficer);
+router.get('/officers', verifyToken, authorizeRoles('admin'), getOfficers);
 
-//Register a user
-router.post("/register", registerUser);
-
-//Login a user
-router.post("/login", loginUser);
 module.exports = router;

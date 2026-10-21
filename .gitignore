@@ -1,0 +1,86 @@
+# ==============================================================================
+# Civics Issue Reporting & Resolution System - .gitignore
+# ==============================================================================
+
+# Dependencies
+node_modules/
+*/node_modules/
+**/node_modules/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+*.env
+*/.env
+*/.env.*
+!*/.env.example
+
+# Expo & React Native Builds
+.expo/
+mobile/.expo/
+dist/
+web-build/
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.keystore
+*.mobileprovision
+.metro-health-check*
+
+# Generated Native Folders
+mobile/ios/
+mobile/android/
+
+# File Uploads & Local Storage
+MobileBackend/uploads/*
+!MobileBackend/uploads/.gitkeep
+Backend/uploads/*
+!Backend/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# Logs & Debug
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# TypeScript Cache
+*.tsbuildinfo
+
+# OS System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# IDE & Editor Files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Temporary & Scratch Files
+screen.png
+scratch/
+tmp/
+temp/
