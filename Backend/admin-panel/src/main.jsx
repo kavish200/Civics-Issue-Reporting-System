@@ -49,6 +49,12 @@ function Login({ onLogin }) {
 function App() {
   const [user, setUser] = useState(null);
   const [issues, setIssues] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [userPagination, setUserPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [userPage, setUserPage] = useState(1);
+  const [userSearch, setUserSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('reports');
+  const [updatingUserId, setUpdatingUserId] = useState('');
   const [stats, setStats] = useState({ total: 0, byStatus: {} });
   const [officers, setOfficers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -66,11 +72,40 @@ function App() {
     } catch (err) { if (err.message === 'SESSION_EXPIRED') logout(); else setError(err.message); }
     finally { setLoading(false); }
   };
+  const loadUsers = async () => {
+    setLoading(true); setError('');
+    try {
+      const query = new URLSearchParams({ page: String(userPage), limit: '50' });
+      if (userSearch.trim()) query.set('search', userSearch.trim());
+      const result = await request(`/admin/users?${query}`);
+      setUsers(result.users || []);
+      setUserPagination(result.pagination || { page: 1, pages: 1, total: 0 });
+    } catch (err) { if (err.message === 'SESSION_EXPIRED') logout(); else setError(err.message); }
+    finally { setLoading(false); }
+  };
   useEffect(() => { if (user) load(); }, [user, filters.status, filters.category]);
+  useEffect(() => {
+    if (!user || activeTab !== 'users') return;
+    const timer = setTimeout(loadUsers, 250);
+    return () => clearTimeout(timer);
+  }, [user, activeTab, userPage, userSearch]);
   const logout = () => { localStorage.removeItem('civics_admin_token'); setUser(null); setSelected(null); };
   const act = async (path, body) => {
     try { await request(path, { method: 'PATCH', body: JSON.stringify(body) }); setNotice('Action completed.'); setSelected(null); await load(); }
     catch (err) { setError(err.message === 'SESSION_EXPIRED' ? 'Your session expired.' : err.message); }
+  };
+  const changeUserRole = async (target, role) => {
+    if (target.role === role || !window.confirm(`Change ${target.name}'s role to ${role}?`)) return;
+    setUpdatingUserId(target._id); setError(''); setNotice('');
+    try {
+      const result = await request(`/admin/users/${target._id}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role })
+      });
+      setNotice(result.message || 'User role updated.');
+      await loadUsers();
+    } catch (err) { if (err.message === 'SESSION_EXPIRED') logout(); else setError(err.message); }
+    finally { setUpdatingUserId(''); }
   };
   if (!user) return <Login onLogin={setUser} />;
 
@@ -90,10 +125,36 @@ function App() {
   ];
 
   return <div className="app-shell"><header><div><p className="eyebrow">CIVICS / ADMIN</p><h1>Issue command center</h1></div><button className="quiet" onClick={logout}>Log out</button></header>
-    <section className="stats">{statCards.map(([label, value]) => <div className="stat" key={label}><span>{label}</span><strong>{value}</strong></div>)}</section>
+    {activeTab === 'reports' && <section className="stats">{statCards.map(([label, value]) => <div className="stat" key={label}><span>{label}</span><strong>{value}</strong></div>)}</section>}
     {notice && <div className="alert success">{notice}</div>}{error && <div className="alert error">{error}</div>}
-    <section className="toolbar"><input placeholder="Search tracking ID or description" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} onKeyDown={(event) => event.key === 'Enter' && load()} /><select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">All statuses</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select><select value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })}><option value="">All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}</select><button className="quiet" onClick={load}>Refresh</button></section>
-    {loading ? <div className="empty">Loading reports...</div> : issues.length === 0 ? <div className="empty">No complaints match these filters.</div> : <div className="issue-grid">{issues.map((issue) => <article className="issue" key={issue._id} onClick={() => setSelected(issue)}><div className="issue-image">{issue.image ? <img src={imageUrl(issue.image)} alt="Complaint evidence" onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : <span>No photo</span>}</div><div className="issue-content"><div className="row"><strong>{issue.trackingId}</strong><span className={`badge ${issue.status.toLowerCase().replaceAll(' ', '-')}`}>{issue.status}</span></div><h2>{issue.description}</h2><p className="muted">{issue.category} · {issue.location?.address || 'Location not provided'}</p><p className="muted">Reported by {issue.reporter?.name || 'Unknown'} · {new Date(issue.createdAt).toLocaleDateString()}</p></div></article>)}</div>}
+    <nav className="admin-tabs" aria-label="Admin sections">
+      <button className={activeTab === 'reports' ? 'active' : 'quiet'} onClick={() => setActiveTab('reports')}>Reports</button>
+      <button className={activeTab === 'users' ? 'active' : 'quiet'} onClick={() => setActiveTab('users')}>Manage users</button>
+    </nav>
+    {activeTab === 'reports' ? <>
+      <section className="toolbar"><input placeholder="Search tracking ID or description" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} onKeyDown={(event) => event.key === 'Enter' && load()} /><select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">All statuses</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select><select value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })}><option value="">All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}</select><button className="quiet" onClick={load}>Refresh</button></section>
+      {loading ? <div className="empty">Loading reports...</div> : issues.length === 0 ? <div className="empty">No complaints match these filters.</div> : <div className="issue-grid">{issues.map((issue) => <article className="issue" key={issue._id} onClick={() => setSelected(issue)}><div className="issue-image">{issue.image ? <img src={imageUrl(issue.image)} alt="Complaint evidence" onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : <span>No photo</span>}</div><div className="issue-content"><div className="row"><strong>{issue.trackingId}</strong><span className={`badge ${issue.status.toLowerCase().replaceAll(' ', '-')}`}>{issue.status}</span></div><h2>{issue.description}</h2><p className="muted">{issue.category} · {issue.location?.address || 'Location not provided'}</p><p className="muted">Reported by {issue.reporter?.name || 'Unknown'} · {new Date(issue.createdAt).toLocaleDateString()}</p></div></article>)}</div>}
+    </> : <section className="users-panel">
+      <div className="users-heading"><div><h2>Manage accounts</h2><p className="muted">{userPagination.total} accounts · citizens can be approved as officers here.</p></div><button className="quiet" onClick={loadUsers}>Refresh</button></div>
+      <div className="toolbar"><input aria-label="Search users" placeholder="Search name or email" value={userSearch} onChange={(event) => { setUserPage(1); setUserSearch(event.target.value); }} /></div>
+      {loading ? <div className="empty">Loading users...</div> : users.length === 0 ? <div className="empty">No users found.</div> : <div className="users-list">
+        {users.map((account) => <article className="user-row" key={account._id}>
+          <div><strong>{account.name}</strong><p className="muted">{account.email}</p></div>
+          <span className={`role-badge ${account.role}`}>{account.role}</span>
+          {account.role === 'admin'
+            ? <span className="muted role-protected">Protected</span>
+            : <select aria-label={`Role for ${account.name}`} value={account.role} disabled={updatingUserId === account._id} onChange={(event) => changeUserRole(account, event.target.value)}>
+                <option value="citizen">Citizen</option><option value="officer">Officer</option>
+              </select>}
+        </article>)}
+      </div>}
+      <div className="users-pagination">
+        <button className="quiet" disabled={userPage <= 1 || loading} onClick={() => setUserPage((page) => page - 1)}>Previous</button>
+        <span>Page {userPagination.page} of {Math.max(userPagination.pages, 1)}</span>
+        <button className="quiet" disabled={userPage >= userPagination.pages || loading} onClick={() => setUserPage((page) => page + 1)}>Next</button>
+      </div>
+      <p className="hint">Administrator accounts cannot be changed here. Officers with active assignments must finish or have their work reassigned before their role can be changed. Users may need to sign in again to refresh role-based navigation in the app.</p>
+    </section>}
     {selected && <Details issue={selected} officers={officers} close={() => setSelected(null)} act={act} />}
   </div>;
 }

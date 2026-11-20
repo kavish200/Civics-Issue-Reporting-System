@@ -49,9 +49,43 @@ const saveUploadedFile = async (file) => {
 
 const { verifyLegitimacy, autoDispatchIssue } = require('../utils/autoTriage');
 
+const respondWithIssue = (res, issue, status, aiInspection = null) => {
+  const officer = issue.assignedTo && issue.assignedTo.name
+    ? issue.assignedTo
+    : null;
+
+  return res.status(status).json({
+    message: 'Issue reported successfully',
+    issue,
+    duplicateCandidate: issue.duplicateCandidate,
+    autoDispatched: Boolean(issue.assignedTo),
+    aiInspection,
+    assignedOfficer: officer
+      ? {
+          id: officer._id,
+          name: officer.name,
+          email: officer.email
+        }
+      : null
+  });
+};
+
 const createIssue = async (req, res, next) => {
   try {
     const { category, description, latitude, longitude, address, clientId } = req.body;
+
+    if (clientId) {
+      const existingIssue = await Issue.findOne({
+        clientId,
+        reporter: req.user.id
+      })
+        .populate('reporter', 'name email')
+        .populate('assignedTo', 'name email');
+
+      if (existingIssue) {
+        return respondWithIssue(res, existingIssue, 200);
+      }
+    }
 
     // 1. Automated Legitimacy Check (Coordinates, Duplicate Detection, Dynamic Priority & Gemini Vision)
     const triage = await verifyLegitimacy({
@@ -93,8 +127,26 @@ const createIssue = async (req, res, next) => {
       clientId: clientId || undefined
     });
 
+    try {
+      await issue.save();
+    } catch (err) {
+      if (err.code === 11000 && clientId) {
+        const existingIssue = await Issue.findOne({
+          clientId,
+          reporter: req.user.id
+        })
+          .populate('reporter', 'name email')
+          .populate('assignedTo', 'name email');
+
+        if (existingIssue) {
+          return respondWithIssue(res, existingIssue, 200);
+        }
+      }
+      throw err;
+    }
+
     // 2. Automated Dispatch to Field Officer (Workload Balancing, Zero Manual Admin Work)
-    const dispatchResult = await autoDispatchIssue(issue, req.user.id, triage.aiInspection);
+    await autoDispatchIssue(issue, req.user.id, triage.aiInspection);
 
     await issue.save();
     await issue.populate('reporter', 'name email');
@@ -102,20 +154,7 @@ const createIssue = async (req, res, next) => {
       await issue.populate('assignedTo', 'name email');
     }
 
-    res.status(201).json({
-      message: 'Issue reported successfully',
-      issue,
-      duplicateCandidate: triage.duplicateCandidate,
-      autoDispatched: dispatchResult.assigned,
-      aiInspection: triage.aiInspection || null,
-      assignedOfficer: dispatchResult.officer
-        ? {
-            id: dispatchResult.officer._id,
-            name: dispatchResult.officer.name,
-            email: dispatchResult.officer.email
-          }
-        : null
-    });
+    return respondWithIssue(res, issue, 201, triage.aiInspection || null);
   } catch (err) {
     next(err);
   }

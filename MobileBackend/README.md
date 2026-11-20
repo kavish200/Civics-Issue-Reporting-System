@@ -74,8 +74,13 @@ CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 JWT_SECRET=your_jwt_secret_here_make_it_long_and_random
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_TIMEOUT_MS=12000
 NODE_ENV=development
 ```
+
+Gemini verification uses the low-latency Gemini 3.5 Flash-Lite model. Requests time out after 12 seconds with SDK retries disabled, so an unavailable AI service falls back without holding up report creation indefinitely.
 
 ## API Documentation
 See `API_CURL_EXAMPLES.md` for detailed cURL examples of all endpoints.

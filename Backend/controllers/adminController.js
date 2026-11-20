@@ -73,6 +73,78 @@ const getEligibleOfficers = async (req, res, next) => {
   }
 };
 
+const getAdminUsers = async (req, res, next) => {
+  try {
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const filter = search
+      ? {
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } }
+          ]
+        }
+      : {};
+
+    const [users, total] = await Promise.all([
+      User.find(filter)
+        .select('_id name email role phone address createdAt')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(filter)
+    ]);
+
+    res.json({
+      users,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateUserRole = async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    if (!isValidId(req.params.id)) {
+      return res.status(400).json({ message: 'Valid user ID is required' });
+    }
+    if (!['citizen', 'officer'].includes(role)) {
+      return res.status(400).json({ message: 'Role must be citizen or officer' });
+    }
+    if (req.params.id === req.user.id) {
+      return res.status(409).json({ message: 'You cannot change your own role' });
+    }
+
+    const user = await User.findById(req.params.id).select('_id name email role');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.role === 'admin') {
+      return res.status(409).json({ message: 'Administrator accounts cannot be changed here' });
+    }
+
+    if (user.role === 'officer' && role === 'citizen') {
+      const activeAssignments = await Issue.countDocuments({
+        assignedTo: user._id,
+        status: { $in: ['Assigned', 'In Progress'] }
+      });
+      if (activeAssignments > 0) {
+        return res.status(409).json({
+          message: 'Reassign or complete this officer’s active issues before changing their role'
+        });
+      }
+    }
+
+    user.role = role;
+    await user.save();
+    res.json({ message: `User role updated to ${role}`, user });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const approveAndAssign = async (req, res, next) => {
   try {
     const { officerId, remark } = req.body;
@@ -147,6 +219,8 @@ module.exports = {
   getAdminIssues,
   getAdminStats,
   getEligibleOfficers,
+  getAdminUsers,
+  updateUserRole,
   approveAndAssign,
   rejectIssue
 };

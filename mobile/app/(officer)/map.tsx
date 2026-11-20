@@ -1,29 +1,31 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/theme';
 import { useAssignedIssues } from '../../src/features/officer/hooks';
 import { LeafletMapView } from '../../src/features/map/LeafletMapView';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { Issue } from '../../src/features/complaints/types';
 
 export default function AssignedMapScreen() {
-  const { colors, spacing, typography, radii, isDark } = useTheme();
+  const { colors, radii } = useTheme();
   const router = useRouter();
   const { data, isLoading } = useAssignedIssues();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const issues = data?.issues ?? [];
-  const markers = issues.map((issue: any) => ({
-    id: issue._id,
-    lat: issue.location?.coordinates?.[1],
-    lng: issue.location?.coordinates?.[0],
-    title: issue.trackingId,
-    description: `${issue.category?.replace('_', ' ')} (${issue.status})`,
-    color: getMarkerColor(issue.status),
-  }));
+  const issues: Issue[] = Array.isArray(data?.issues) ? data.issues : [];
+  const markers = issues.filter((issue) => {
+    const [longitude, latitude] = issue.location?.coordinates ?? [];
+    return (
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180
+    );
+  });
 
   const handleMarkerPress = (id: string) => {
-    setSelectedId(id);
     router.push(`/(officer)/issues/${id}`);
   };
 
@@ -55,7 +57,6 @@ export default function AssignedMapScreen() {
         <LeafletMapView
           markers={markers}
           onMarkerPress={handleMarkerPress}
-          selectedMarkerId={selectedId}
           showCluster={true}
           showLegend={true}
           showRecenterButton={true}
@@ -64,19 +65,6 @@ export default function AssignedMapScreen() {
       </View>
     </ScreenContainer>
   );
-}
-
-function getMarkerColor(status: string): string {
-  switch (status) {
-    case 'Assigned':
-      return '#3B82F6';
-    case 'In Progress':
-      return '#F59E0B';
-    case 'Resolved':
-      return '#10B981';
-    default:
-      return '#6B7280';
-  }
 }
 
 const styles = StyleSheet.create({
@@ -94,4 +82,3 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
-

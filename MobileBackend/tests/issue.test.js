@@ -76,6 +76,46 @@ describe('Issue Endpoints', () => {
       ]);
     });
 
+    it('should return the existing issue when a create request is retried', async () => {
+      const citizen = await User.create({
+        name: 'Retry Test Citizen',
+        email: 'retry-citizen@example.com',
+        password: 'password123',
+        role: 'citizen'
+      });
+      const token = jwt.sign(
+        { userId: citizen._id.toString(), role: 'citizen' },
+        process.env.JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+      const fields = {
+        category: 'road_damage',
+        description: 'Large pothole on main street',
+        latitude: '22.7196',
+        longitude: '75.8577',
+        clientId: 'retry-safe-ticket'
+      };
+
+      const submit = () => {
+        return request(app)
+          .post('/api/issues/create')
+          .set('Authorization', `Bearer ${token}`)
+          .field('category', fields.category)
+          .field('description', fields.description)
+          .field('latitude', fields.latitude)
+          .field('longitude', fields.longitude)
+          .field('clientId', fields.clientId);
+      };
+
+      const firstResponse = await submit();
+      const retryResponse = await submit();
+
+      expect(firstResponse.status).toBe(201);
+      expect(retryResponse.status).toBe(200);
+      expect(retryResponse.body.issue._id).toBe(firstResponse.body.issue._id);
+      expect(await Issue.countDocuments({ clientId: fields.clientId })).toBe(1);
+    });
+
     it('should reject missing required fields', async () => {
       const response = await request(app)
         .post('/api/issues/create')

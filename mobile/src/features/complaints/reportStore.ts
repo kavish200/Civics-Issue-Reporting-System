@@ -23,7 +23,7 @@ export interface ReportState {
   setPhoto: (uri: string) => void;
   setLocation: (latitude: number, longitude: number, address: string | null, accuracy: number | null) => void;
   setDescription: (description: string) => void;
-  setClientId: () => void;
+  setClientId: () => string;
   setIsSubmiting: (isSubmiting: boolean) => void;
 }
 
@@ -54,7 +54,11 @@ export const useReportStore = create<ReportState>((set) => ({
   setLocation: (latitude, longitude, address, accuracy) =>
     set({ latitude, longitude, address, accuracy }),
   setDescription: (description) => set({ description }),
-  setClientId: () => set({ clientId: generateUuid() }),
+  setClientId: () => {
+    const clientId = generateUuid();
+    set({ clientId });
+    return clientId;
+  },
   setIsSubmiting: (isSubmiting) => set({ isSubmiting }),
 }));
 

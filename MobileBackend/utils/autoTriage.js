@@ -55,38 +55,29 @@ async function verifyLegitimacy({ category, description, latitude, longitude, fi
   }
 
   // 5. Gemini AI Vision & Content Verification
-  let aiInspection = null;
-  try {
-    aiInspection = await verifyWithGemini({ category, description: trimmedDesc, file });
-    if (aiInspection && aiInspection.isLegit === false) {
-      errors.push(
-        `AI Inspection Alert: The submitted report was flagged as unverified or non-civic. Reason: ${aiInspection.reason || 'Photo does not appear to show a valid civic issue.'}`
-      );
-      return { isLegit: false, errors, aiInspection };
-    }
-  } catch (aiErr) {
-    console.warn('AutoTriage: Gemini AI check warning:', aiErr.message);
-  }
-
-  // 6. Duplicate Detection Check using geospatial radius & time window
-  let duplicateCandidate = false;
-  let duplicateOf = null;
-  try {
-    const nearbyDuplicates = await checkForDuplicates({
-      location: {
-        type: 'Point',
-        coordinates: [lng, lat]
-      },
+  const [aiInspection, nearbyDuplicates] = await Promise.all([
+    verifyWithGemini({ category, description: trimmedDesc, file }).catch((aiErr) => {
+      console.warn('AutoTriage: Gemini AI check warning:', aiErr.message);
+      return null;
+    }),
+    checkForDuplicates({
+      location: { type: 'Point', coordinates: [lng, lat] },
       category
-    });
+    }).catch((dupErr) => {
+      console.warn('AutoTriage: Duplicate detection warning:', dupErr.message);
+      return [];
+    })
+  ]);
 
-    if (nearbyDuplicates && nearbyDuplicates.length > 0) {
-      duplicateCandidate = true;
-      duplicateOf = nearbyDuplicates[0]._id;
-    }
-  } catch (dupErr) {
-    console.warn('AutoTriage: Duplicate detection warning:', dupErr.message);
+  if (aiInspection && aiInspection.isLegit === false) {
+    errors.push(
+      `AI Inspection Alert: The submitted report was flagged as unverified or non-civic. Reason: ${aiInspection.reason || 'Photo does not appear to show a valid civic issue.'}`
+    );
+    return { isLegit: false, errors, aiInspection };
   }
+
+  const duplicateCandidate = nearbyDuplicates.length > 0;
+  const duplicateOf = duplicateCandidate ? nearbyDuplicates[0]._id : null;
 
   // 7. Dynamic Priority Score & Severity Calculation
   const reportCount = duplicateCandidate ? 2 : 1;
@@ -132,15 +123,22 @@ async function autoDispatchIssue(issue, reporterId, aiInspection) {
     }
 
     // 2. Workload Balancing: Count open tasks for each officer
-    const workloadList = await Promise.all(
-      officers.map(async (officer) => {
-        const activeCount = await Issue.countDocuments({
-          assignedTo: officer._id,
+    const workloads = await Issue.aggregate([
+      {
+        $match: {
+          assignedTo: { $in: officers.map((officer) => officer._id) },
           status: { $in: ['Assigned', 'In Progress'] }
-        });
-        return { officer, activeCount };
-      })
+        }
+      },
+      { $group: { _id: '$assignedTo', activeCount: { $sum: 1 } } }
+    ]);
+    const workloadByOfficer = new Map(
+      workloads.map(({ _id, activeCount }) => [_id.toString(), activeCount])
     );
+    const workloadList = officers.map((officer) => ({
+      officer,
+      activeCount: workloadByOfficer.get(officer._id.toString()) || 0
+    }));
 
     // Sort officers by lowest active workload
     workloadList.sort((a, b) => a.activeCount - b.activeCount);

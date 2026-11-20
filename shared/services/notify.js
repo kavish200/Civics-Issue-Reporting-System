@@ -14,6 +14,8 @@ async function sendPushNotification(pushToken, notification) {
       title: notification.title,
       body: notification.body,
       data: notification.data || {},
+    }, {
+      timeout: 8000,
     });
   } catch (error) {
     // Silently ignore push failures
