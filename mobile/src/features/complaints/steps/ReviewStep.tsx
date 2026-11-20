@@ -46,7 +46,13 @@ export default function ReviewStep({ onBack, onSubmitSuccess }: ReviewStepProps)
   const categoryMeta = getCategoryMeta(category || '');
 
   const handleSubmit = async () => {
-    if (!category || !photoUri || !latitude || !longitude || !description) {
+    if (
+      !category ||
+      !photoUri ||
+      latitude === null ||
+      longitude === null ||
+      !description
+    ) {
       Alert.alert('Error', 'Please complete all required fields before submitting.');
       return;
     }
@@ -54,10 +60,7 @@ export default function ReviewStep({ onBack, onSubmitSuccess }: ReviewStepProps)
     try {
       setIsSubmiting(true);
 
-      // Generate clientId if not already set
-      if (!clientId) {
-        setClientId();
-      }
+      const submissionClientId = clientId || setClientId();
 
       // Prepare form data
       const formData = new FormData();
@@ -66,10 +69,9 @@ export default function ReviewStep({ onBack, onSubmitSuccess }: ReviewStepProps)
       formData.append('address', address || '');
       formData.append('latitude', latitude.toString());
       formData.append('longitude', longitude.toString());
-      formData.append('clientId', clientId);
+      formData.append('clientId', submissionClientId);
 
       // Append image file
-      const imageExt = photoUri.split('.').pop() || 'jpg';
       formData.append('image', {
         uri: photoUri,
         type: 'image/jpeg',
@@ -81,6 +83,7 @@ export default function ReviewStep({ onBack, onSubmitSuccess }: ReviewStepProps)
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 30000,
         onUploadProgress: (progressEvent: any) => {
           const progress = Math.round(
             (progressEvent.loaded / (progressEvent.total || 1)) * 100

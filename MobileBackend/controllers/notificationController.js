@@ -15,13 +15,15 @@ const createNotification = async (recipientId, data) => {
 
     const user = await User.findById(recipientId);
     if (user && user.pushToken) {
-      await sendPushNotification(user.pushToken, {
+      sendPushNotification(user.pushToken, {
         title: data.title || 'Civics Report Update',
         body: data.message,
         data: {
           issueId: data.issue?.toString(),
           type: data.type,
         },
+      }).catch((error) => {
+        console.error('Push notification delivery failed:', error);
       });
     }
 

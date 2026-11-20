@@ -13,6 +13,12 @@ const { GoogleGenAI } = require('@google/genai');
  */
 async function verifyWithGemini({ category, description, file }) {
   const apiKey = process.env.GEMINI_API_KEY;
+  const configuredTimeout = Number.parseInt(process.env.GEMINI_TIMEOUT_MS, 10);
+  const timeout =
+    Number.isFinite(configuredTimeout) && configuredTimeout > 0
+      ? configuredTimeout
+      : 12000;
+  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
   // Graceful fallback if no API key is set yet
   if (!apiKey || apiKey === 'your_gemini_api_key_here') {
@@ -24,27 +30,17 @@ async function verifyWithGemini({ category, description, file }) {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        timeout,
+        retryOptions: { attempts: 1 }
+      }
+    });
 
-    const prompt = `You are an AI Civic Inspection Officer for a municipal government.
-Analyze this submitted citizen grievance report:
-- Stated Category: "${category}"
-- Stated Description: "${description || 'None provided'}"
-
-Evaluate the legitimacy of this complaint.
-If an image is attached, inspect the image closely:
-1. Does it depict a genuine municipal/civic issue (e.g., damaged road/pothole, uncollected garbage/dump, faulty street lamp, leaking water pipe, overflowing drain)?
-2. Is the image fake, spam, a selfie, a meme, an indoor room/gaming screenshot, or completely unrelated to civic infrastructure?
-3. What is the severity (Low, Medium, High, Critical) and confidence level (0.0 to 1.0)?
-
-Return a JSON object in exactly this format:
-{
-  "isLegit": boolean,
-  "confidence": number,
-  "detectedCategory": "road_damage" | "garbage" | "streetlight" | "water" | "drainage" | "other" | "none",
-  "suggestedPriority": "Low" | "Medium" | "High" | "Critical",
-  "reason": "Brief 1-2 sentence explanation of your inspection findings."
-}`;
+    const prompt = `Check this civic issue report. Category: "${category}". Description: "${description || 'None provided'}".
+If there is an image, decide whether it shows this kind of civic issue and assess severity.
+Return JSON only: {"isLegit":boolean,"confidence":number,"detectedCategory":"road_damage"|"garbage"|"streetlight"|"water"|"drainage"|"other"|"none","suggestedPriority":"Low"|"Medium"|"High"|"Critical","reason":"brief explanation"}`;
 
     const contents = [];
 
@@ -61,10 +57,12 @@ Return a JSON object in exactly this format:
     contents.push(prompt);
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
+      model,
       contents,
       config: {
-        responseMimeType: 'application/json'
+        responseMimeType: 'application/json',
+        maxOutputTokens: 160,
+        temperature: 0
       }
     });
 
